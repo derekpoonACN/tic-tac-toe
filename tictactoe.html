@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tic-Tac-Toe</title>
+<style>
+  :root {
+    --bg: #f4f1ea;
+    --card: #ffffff;
+    --ink: #1f2430;
+    --muted: #6b7280;
+    --line: #d9d4c7;
+    --x: #e4572e;
+    --o: #2e86ab;
+    --accent: #1f2430;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 32px 16px;
+  }
+  main { width: 100%; max-width: 420px; }
+  h1 { margin: 0 0 20px; font-size: 28px; text-align: center; letter-spacing: -0.5px; }
+
+  .controls { display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; }
+  .seg {
+    display: flex; background: var(--card); border: 1px solid var(--line);
+    border-radius: 10px; padding: 3px;
+  }
+  .seg button {
+    flex: 1; border: 0; background: transparent; padding: 8px 6px;
+    font: inherit; font-size: 14px; color: var(--muted); border-radius: 7px; cursor: pointer;
+  }
+  .seg button.active { background: var(--accent); color: #fff; }
+  .seg[hidden] { display: none; }
+
+  .scoreboard { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
+  .score {
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px 6px; text-align: center;
+  }
+  .score .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .score .value { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .score.x .value { color: var(--x); }
+  .score.o .value { color: var(--o); }
+
+  .status { text-align: center; font-size: 17px; font-weight: 600; min-height: 26px; margin-bottom: 12px; }
+
+  .board {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+    aspect-ratio: 1; margin-bottom: 18px;
+  }
+  .cell {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    font-size: clamp(48px, 18vw, 80px); font-weight: 800; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; padding: 0; font-family: inherit;
+    transition: background 0.15s;
+  }
+  .cell:hover:not(:disabled) { background: #faf8f3; }
+  .cell:disabled { cursor: default; }
+  .cell.x { color: var(--x); }
+  .cell.o { color: var(--o); }
+
+  .actions { display: flex; gap: 8px; }
+  .actions button {
+    flex: 1; padding: 12px; font: inherit; font-weight: 600; border-radius: 10px; cursor: pointer;
+  }
+  .primary { background: var(--accent); color: #fff; border: 0; }
+  .secondary { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Tic-Tac-Toe</h1>
+
+  <div class="controls">
+    <div class="seg" id="modeSeg">
+      <button data-mode="cpu" class="active">vs Computer</button>
+      <button data-mode="pvp">2 Players</button>
+    </div>
+    <div class="seg" id="diffSeg">
+      <button data-diff="easy">Easy</button>
+      <button data-diff="medium" class="active">Medium</button>
+      <button data-diff="hard">Hard</button>
+    </div>
+  </div>
+
+  <div class="scoreboard">
+    <div class="score x"><div class="label" id="xLabel">You (X)</div><div class="value" id="xScore">0</div></div>
+    <div class="score"><div class="label">Draws</div><div class="value" id="dScore">0</div></div>
+    <div class="score o"><div class="label" id="oLabel">Computer (O)</div><div class="value" id="oScore">0</div></div>
+  </div>
+
+  <div class="status" id="status"></div>
+  <div class="board" id="board"></div>
+
+  <div class="actions">
+    <button class="primary" id="newRound">New round</button>
+    <button class="secondary" id="resetScores">Reset scores</button>
+  </div>
+</main>
+
+<script>
+  const LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+
+  let board, turn, over, mode = "cpu", diff = "medium";
+  let scores = { X: 0, O: 0, D: 0 };
+  let starter = "X"; // alternates each round
+
+  const boardEl = document.getElementById("board");
+  const statusEl = document.getElementById("status");
+  const cells = [];
+  for (let i = 0; i < 9; i++) {
+    const b = document.createElement("button");
+    b.className = "cell";
+    b.setAttribute("aria-label", "Square " + (i + 1));
+    b.addEventListener("click", () => humanMove(i));
+    boardEl.appendChild(b);
+    cells.push(b);
+  }
+
+  function winner(b) {
+    for (const [a, c, d] of LINES) if (b[a] && b[a] === b[c] && b[a] === b[d]) return b[a];
+    return b.every(Boolean) ? "D" : null;
+  }
+
+  function name(p) {
+    if (mode === "cpu") return p === "X" ? "You" : "Computer";
+    return "Player " + p;
+  }
+
+  function render() {
+    board.forEach((v, i) => {
+      cells[i].textContent = v || "";
+      cells[i].className = "cell" + (v ? " " + v.toLowerCase() : "");
+      cells[i].disabled = !!v || over || (mode === "cpu" && turn === "O");
+    });
+    const w = winner(board);
+    if (w === "D") statusEl.textContent = "It's a draw.";
+    else if (w) statusEl.textContent = mode === "cpu"
+      ? (w === "X" ? "You win!" : "Computer wins.")
+      : `Player ${w} wins!`;
+    else statusEl.textContent = mode === "cpu"
+      ? (turn === "X" ? "Your turn" : "Computer is thinking…")
+      : `Player ${turn}'s turn`;
+
+    document.getElementById("xScore").textContent = scores.X;
+    document.getElementById("oScore").textContent = scores.O;
+    document.getElementById("dScore").textContent = scores.D;
+    document.getElementById("xLabel").textContent = name("X") + " (X)";
+    document.getElementById("oLabel").textContent = name("O") + " (O)";
+    document.getElementById("diffSeg").hidden = mode !== "cpu";
+  }
+
+  function place(i) {
+    if (over || board[i]) return;
+    board[i] = turn;
+    const w = winner(board);
+    if (w) { over = true; scores[w]++; }
+    else turn = turn === "X" ? "O" : "X";
+    render();
+    if (!over && mode === "cpu" && turn === "O") setTimeout(cpuMove, 400);
+  }
+
+  function humanMove(i) {
+    if (mode === "cpu" && turn === "O") return;
+    place(i);
+  }
+
+  // ---- Computer ----
+  function minimax(b, player, depth) {
+    const w = winner(b);
+    if (w === "O") return 10 - depth;
+    if (w === "X") return depth - 10;
+    if (w === "D") return 0;
+    let best = player === "O" ? -Infinity : Infinity;
+    for (let i = 0; i < 9; i++) {
+      if (b[i]) continue;
+      b[i] = player;
+      const s = minimax(b, player === "O" ? "X" : "O", depth + 1);
+      b[i] = null;
+      best = player === "O" ? Math.max(best, s) : Math.min(best, s);
+    }
+    return best;
+  }
+
+  function bestMove() {
+    let best = -Infinity, moves = [];
+    for (let i = 0; i < 9; i++) {
+      if (board[i]) continue;
+      board[i] = "O";
+      const s = minimax(board, "X", 1);
+      board[i] = null;
+      if (s > best) { best = s; moves = [i]; }
+      else if (s === best) moves.push(i);
+    }
+    return moves[Math.floor(Math.random() * moves.length)];
+  }
+
+  function randomMove() {
+    const empty = board.map((v, i) => v ? null : i).filter(v => v !== null);
+    return empty[Math.floor(Math.random() * empty.length)];
+  }
+
+  function cpuMove() {
+    if (over || mode !== "cpu" || turn !== "O") return;
+    const smartChance = { easy: 0, medium: 0.6, hard: 1 }[diff];
+    place(Math.random() < smartChance ? bestMove() : randomMove());
+  }
+
+  // ---- Controls ----
+  function newRound() {
+    board = Array(9).fill(null);
+    over = false;
+    turn = starter;
+    starter = starter === "X" ? "O" : "X";
+    render();
+    if (mode === "cpu" && turn === "O") setTimeout(cpuMove, 400);
+  }
+
+  function resetScores() {
+    scores = { X: 0, O: 0, D: 0 };
+    starter = "X";
+    newRound();
+  }
+
+  function setupSeg(id, attr, onChange) {
+    const seg = document.getElementById(id);
+    seg.addEventListener("click", e => {
+      const btn = e.target.closest("button");
+      if (!btn) return;
+      seg.querySelectorAll("button").forEach(b => b.classList.toggle("active", b === btn));
+      onChange(btn.dataset[attr]);
+    });
+  }
+  setupSeg("modeSeg", "mode", m => { mode = m; resetScores(); });
+  setupSeg("diffSeg", "diff", d => { diff = d; resetScores(); });
+
+  document.getElementById("newRound").addEventListener("click", newRound);
+  document.getElementById("resetScores").addEventListener("click", resetScores);
+
+  newRound();
+</script>
+</body>
+</html>
